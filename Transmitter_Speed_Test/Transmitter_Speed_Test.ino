@@ -1,5 +1,6 @@
 const int laserPin = 9;         // Laser output pin
 const int bitRate_Hz = 2000;     // Transmission frequency (bits per second)
+unsigned long bitDuration_ms = 1000 / bitRate_Hz; // Microseconds per bit
 unsigned long bitDuration_us = 1000000 / bitRate_Hz; // Microseconds per bit
 const int testBits = 100;       // Length of alternating test code (101010...)
 
@@ -35,7 +36,13 @@ void sendTestCode() {
   Serial.println("Sending test code: alternating 1s and 0s for 100 bits");
   for (int i = 0; i < testBits; i++) {
     digitalWrite(laserPin, (i % 2) == 0 ? HIGH : LOW); // Alternate 1 (HIGH) and 0 (LOW)
-    delayMicroseconds(bitDuration_us);
+    if (bitRate_Hz <= 1500){
+      delay(bitDuration_ms);
+    }
+    else{
+      delayMicroseconds(bitDuration_us);
+    }   
+    
   }
   digitalWrite(laserPin, LOW);
   Serial.println("Test code sent.");
