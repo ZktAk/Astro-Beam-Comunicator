@@ -1,7 +1,7 @@
 // Reciever code
 const int analogPin = A0;             // Photodiode input
-const int bitRate_Hz = 2000;          // Must match transmitter
-const int threshold = 25;             // Raw ADC threshold for bit=1 (voltage < ~1V)
+const int bitRate_Hz = 100;          // Must match transmitter
+const int threshold = 35;             // Raw ADC threshold for bit=1 (voltage < ~1V)
 const int testBits = 100;             // Length of alternating test code (101010...)
 
 
@@ -22,7 +22,7 @@ void calibrateReceiver() {
   bool inCalibration = false;
 
   while (bitCount < testBits) {
-    int raw = analogRead(analogPin);  
+    int raw = analogRead(analogPin);
     bool bit = (raw < threshold) ? 1 : 0;
     if (!inCalibration && bit == 1) {
       // Detect start of calibration (first transition to 1)    
@@ -32,6 +32,7 @@ void calibrateReceiver() {
     
     } else if (inCalibration && bit != lastBit) {
       // Record time of each bit transition
+      
       startTimes[bitCount] = micros();
       bitCount++;
     }
