@@ -23,6 +23,7 @@ void calibrateReceiver() {
 
   while (bitCount < testBits) {
     int raw = analogRead(analogPin);
+    //Serial.println(raw);
     bool bit = (raw < threshold) ? 1 : 0;
     if (!inCalibration && bit == 1) {
       // Detect start of calibration (first transition to 1)    
