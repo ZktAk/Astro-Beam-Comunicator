@@ -3,18 +3,33 @@
 const int sensorPin = A0;
 const int THRESHOLD = 50;  // adjust based on light level (0–1023)
     
-const int halfBitRate_Hz = 1000; // only used to derive sampling rate
-const int oversampleFactor = 4; // >= 4x faster than half-bit rate. This makes sure that we are sampling at a higher rate than we expect data to be recieved so that we never miss a transition, regardless of timing drift.
+const int halfBitRate_Hz = 100; // only used to derive sampling rate
+const int oversampleFactor = 10; // >= 4x faster than half-bit rate. This makes sure that we are sampling at a higher rate than we expect data to be recieved so that we never miss a transition, regardless of timing drift.
 const unsigned long samplePeriod_us = 1000000UL / (halfBitRate_Hz * oversampleFactor);
 
 bool lastLevel = 0;
 unsigned long lastTransitionTime = 0;
 unsigned long lastHalfBit_us = 0;
-bool halfBit = 1; // on startup, we know that we will be recieved a manchester encoded 0 stream from the transmitter. Meaning that we are recieveing only halfbit deltas.
-bool mid = 0;
+
+bool halfBit = 0; // on startup, we know that we will be recieved a manchester encoded 10101010... stream from the transmitter. Meaning that we are recieveing only fullbit deltas.
+bool mid = 1; // on startup, we know that we will be recieved a manchester encoded 10101010... stream from the transmitter. Meaning that we are only recieving midpoint transitions
+// Something to note here is that if we were to startup here and in the
+// transmitter with sending just encoded 0's, we would know that we would start
+// up with recieveing only halfbit deltas, but crucially we wouldn't know which
+// transitions are boundry or midpoint transitions untill we recieve a fullbit delta.
+// Therefore, depending on the initial phase offset, the reciver could interpret
+// the bit stream as 1's or 0's, even though the transmitter is sending 0's.
+// If we are offset and are seeing a bit stream oif 1's instead of 0's, that
+// will mess up our preamble detection - all decoded idle bits are 1's instead 
+// of 0's and we detect a preamble and then immediatly a postamble when actually
+// neither where actyually sent. Crucually, this can be avoided by sending
+// alternating encoded 1's and 0's on startup, allowing the reciever to assume
+// that each delta is a fullbit delta and is therefore recieved at the midpoit.
+// Therefore, there is no ambiguity.
+
 
 unsigned long prevDelta = 0;
-unsigned long nowDelta = 10 * oversampleFactor * samplePeriod_us; // just make sure that this is initially longer than anything we would expect
+unsigned long nowDelta = 0; // just make sure that this is initially longer than anything we would expect
 
 String bitStream = "";
 String decodedMessage = "";
@@ -35,6 +50,7 @@ void loop() {
   if (currentLevel != lastLevel) {    
     unsigned long now = micros();    
     nowDelta = now - lastTransitionTime;
+    //Serial.println(nowDelta);
     //Serial.println(currentLevel ? '1' : '0');
 
     if (prevDelta > 0) {
@@ -72,25 +88,29 @@ void loop() {
         // then we need to invert "mid".
         mid = !mid;
       }
+      //Serial.print(currentLevel);
+      //Serial.println(mid ? ": mid" : ": boundry");     
 
       if (mid) {
         // Rising midpoint = bit '1'
         // Falling midpoint = bit '0'
         bool bitValue = currentLevel; // rising=HIGH=true=1, falling=LOW=false=0
         bitStream += bitValue ? '1' : '0';
+        //Serial.println(bitValue);
 
         // Check for preamble (start of message)
-        if (!receiving && bitStream.endsWith("11111111")) {
+        if (!receiving && bitStream.endsWith("0111111110")) {
           receiving = true;
           bitStream = "";  // clear buffer, start fresh
           Serial.println("Preamble detected. Receiving...");
         }
 
         // Check for postamble (end of message)
-        if (receiving && bitStream.endsWith("11111111")) {
+        if (receiving && bitStream.endsWith("0111111110")) {
           receiving = false;
-          decodedMessage = decodeBinaryToText(bitStream.substring(0, bitStream.length() - 8));
-          Serial.print("Received Message: ");
+          decodedMessage = decodeBinaryToText(bitStream.substring(0, bitStream.length() - 10));
+          Serial.println("Received Message:");
+          Serial.println(bitStream.substring(0, bitStream.length() - 10));
           Serial.println(decodedMessage);
           bitStream = "";
         }
