@@ -43,6 +43,7 @@ void loop() {
     digitalWrite(laserPin, nextBit ? LOW : HIGH);
   }
 
+  //delayMicroseconds(clockPulse_us);
   delay(clockPulse_ms);
 }
 
@@ -63,7 +64,7 @@ void messageToBinary() {
 
 void bookendMessage() {
   // keep preamble and postamble
-  messageBin = "0111111110" + messageBin + "0111111110";
+  messageBin = "111111110" + messageBin + "011111111";
 }
 
 String textToBinary(String text) { 
