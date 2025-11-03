@@ -13,20 +13,21 @@ void setup() {
 
 void loop() {
   int raw = analogRead(analogPin); 
+  Serial.println(raw);
 
-  if (raw > 25 and raw < 930) {
-    raws[n] = raw;
-    n++;
-    printed = 1;
-  }
+  // if (raw > 0 and raw < 930) {
+  //   raws[n] = raw;
+  //   n++;
+  //   printed = 1;
+  // }
 
-  else if (printed){
-    for (int i = 0; i < n; i++){
-      Serial.println(raws[i]);
-    }
-    n=0;  
-    printed = 0;
-  }
+  // else if (printed){
+  //   for (int i = 0; i < n; i++){
+  //     Serial.println(raws[i]);
+  //   }
+  //   n=0;  
+  //   printed = 0;
+  // }
 
   delayMicroseconds(100);
 

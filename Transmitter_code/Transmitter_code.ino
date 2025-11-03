@@ -1,7 +1,7 @@
 // === Manchester Transmitter ===
 
 const int laserPin = 9;         // Laser output pin
-const int clockPulseRate_Hz = 10;   // halfBitRate_Hz  // Transmission frequency (bits per second)
+const int clockPulseRate_Hz = 500;   // halfBitRate_Hz  // Transmission frequency (bits per second)
 unsigned long clockPulse_ms = 1000 / clockPulseRate_Hz; 
 unsigned long clockPulse_us = 1000000 / clockPulseRate_Hz; 
 
@@ -30,20 +30,28 @@ void loop() {
     delay(clockPulse_ms);
     return;
   }
-
-  // --- Transmission in progress ---
-  nextBit = messageBin[0] == '1';
-
-  if (mid) {
-    // midpoint: encode bit
-    digitalWrite(laserPin, nextBit ? HIGH : LOW);
-    messageBin.remove(0, 1);  // advance after full period
-  } else {
-    // bit boundary: opposite of midpoint
-    digitalWrite(laserPin, nextBit ? LOW : HIGH);
+  else {
+    mid = !mid;
   }
 
-  //delayMicroseconds(clockPulse_us);
+  while (messageBin.length() > 0) {
+    mid = !mid;
+    nextBit = messageBin[0] == '1';
+
+    if (mid) {
+      // midpoint: encode bit
+      digitalWrite(laserPin, nextBit ? HIGH : LOW);
+      messageBin.remove(0, 1);  // advance after full period
+    } else {
+      // bit boundary: opposite of midpoint
+      digitalWrite(laserPin, nextBit ? LOW : HIGH);
+    }
+
+    delayMicroseconds(clockPulse_us);
+    //delay(clockPulse_ms);
+  }
+  
+  //delayMicroseconds(clockPulse_us);  
   delay(clockPulse_ms);
 }
 
@@ -64,7 +72,7 @@ void messageToBinary() {
 
 void bookendMessage() {
   // keep preamble and postamble
-  messageBin = "111111110" + messageBin + "011111111";
+  messageBin = "1111111111111111111111110" + messageBin + "0111111111111111111111111";
 }
 
 String textToBinary(String text) { 
