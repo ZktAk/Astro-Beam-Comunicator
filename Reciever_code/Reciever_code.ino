@@ -1,4 +1,7 @@
-// === Manchester Receiver ===
+// === Manchester Receiver (String -> char[] version) ===
+#include <Arduino.h>
+#include <string.h>
+#include <stdlib.h>
 
 const int sensorPin = A0;
 const int THRESHOLD = 20;  // adjust based on light level (0–1023)
@@ -9,7 +12,6 @@ int pinADC;
 
 bool bit;
 bool lastBit = 0b0;
-
 
 unsigned long prevDelta = 0;
 unsigned long nowDelta = 0;
@@ -22,16 +24,24 @@ int recievedBits = 0;
 bool mid;
 bool halfBit;
 
-String endOfTransmission = "00000100"; // i.e. 0x04
-String currentByte = "";
+const char endOfTransmission[] = "00000100"; // i.e. 0x04
+
+// buffers replacing String
+char currentByte[9]; // 8 bits + null
 int byteLength = 0;
-String bitStream = "";
-String decodedMessage = "";
+
+#define MAX_DECODE_CHARS 64
+char bitStream[MAX_DECODE_CHARS + 1];
+int bitStreamLen = 0;
 
 void setup() {
   Serial.begin(115200);
   pinMode(sensorPin, INPUT);
   Serial.println("Manchester Receiver Ready");
+  currentByte[0] = '\0';
+  byteLength = 0;
+  bitStreamLen = 0;
+  bitStream[0] = '\0';
 }
 
 void loop() {
@@ -40,7 +50,7 @@ void loop() {
     pinADC = analogRead(sensorPin);
     bit = pinADC < THRESHOLD;
 
-    bool transition = bit^lastBit;   
+    bool transition = bit ^ lastBit;   
 
     if (transition){
       recievedBits ++;
@@ -71,7 +81,7 @@ void loop() {
   pinADC = analogRead(sensorPin);
   bit = pinADC < THRESHOLD;
 
-  bool transition = bit^lastBit;
+  bool transition = bit ^ lastBit;
 
   if (transition) {
     now = micros();
@@ -96,16 +106,19 @@ void loop() {
     mid &= ~condLow;
 
     if (mid) {
-      currentByte += bit ? "1" : "0";
-      byteLength ++;
-      //Serial.println(currentByte);      
+      // append bit char to currentByte
+      if (byteLength < 8) {
+        currentByte[byteLength++] = bit ? '1' : '0';
+        currentByte[byteLength] = '\0';
+      }
 
-      if (byteLength == 8){
+      if (byteLength == 8) {
 
-        if (currentByte == endOfTransmission){
+        if (strcmp(currentByte, endOfTransmission) == 0){
           Serial.println("Received Message:");
+          bitStream[bitStreamLen] = '\0';
           Serial.println(bitStream);
-          bitStream = "";
+          bitStreamLen = 0;
           recievedBits = 0;
           prevDelta = 0;
           nowDelta = 0;
@@ -113,11 +126,13 @@ void loop() {
           lastTransitionTime = 0;
         }
         else{
-          char value = (char) strtol(currentByte.c_str(), NULL, 2);
-          bitStream += value;  
+          char value = (char) strtol(currentByte, NULL, 2);
+          if (bitStreamLen < MAX_DECODE_CHARS) {
+            bitStream[bitStreamLen++] = value;  
+          }
         }
         
-        currentByte = "";
+        currentByte[0] = '\0';
         byteLength = 0;
       }
     }
