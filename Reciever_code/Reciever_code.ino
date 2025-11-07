@@ -44,7 +44,7 @@ void setup() {
 
 void loop() {
   
-  while (recievedBits < 8){
+  while (recievedBits < 3){
     pinADC = analogRead(sensorPin);
     bit = pinADC < THRESHOLD;
 
@@ -70,7 +70,7 @@ void loop() {
     mid = 1;
     halfBit = 0;
 
-    if (recievedBits == 8) Serial.println("\nMessage Inbound");
+    if (recievedBits == 3) Serial.println("\nMessage Inbound");
 
     delayMicroseconds(samplePeriod_us);
   }

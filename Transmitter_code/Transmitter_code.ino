@@ -1,19 +1,18 @@
 // === Manchester Transmitter ===
 
 const int laserPin = 9;         // Laser output pin
-const int clockPulseRate_Hz = 700;   // halfBitRate_Hz  // Transmission frequency (bits per second)
+const int clockPulseRate_Hz = 900;   // halfBitRate_Hz  // Transmission frequency (bits per second)
 unsigned long clockPulse_ms = 1000 / clockPulseRate_Hz; 
 unsigned long clockPulse_us = 1000000 / clockPulseRate_Hz; 
 
 int8_t END_OF_TRANSMISSION = 0x4; // i.e. 0x04
-#define CHARACTER_LIMIT 64
 
 bool nextBit;
 
 String message = "";
-uint8_t messageBinary[CHARACTER_LIMIT];
-int byteIndex = 0;
-bool sending = 0;
+uint64_t messageBinary = 0b0;
+int messageSize = 0;
+int msbIndex = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -27,27 +26,37 @@ void loop() {
   getMessage();
 
   // --- When idle, laser is off ---
-  if (!sending) {
+  if (messageSize == 0) {
     digitalWrite(laserPin, LOW);
     delay(clockPulse_ms);
     return;
   }
+  
+  // Serial.println("");
 
-  for (int i = 0; i < byteIndex+1; i++) {    
-    
-    for (int j = 7; j >= 0; j--){      
-      nextBit = (messageBinary[i] >> j) & 0b1; 
+  for (int i = msbIndex; i >= 0; i--) {
+    nextBit = (messageBinary >> i) & 0b1;
 
-      digitalWrite(laserPin, nextBit ? LOW : HIGH);
-      delayMicroseconds(clockPulse_us);
-      //delay(clockPulse_ms);
+    // Serial.print(nextBit);    
+    // if (i % 8 == 0){
+    //   Serial.print(" ");
+    // }
+    // else if (i==4) {
+    //   Serial.print(" ");
+    // }
+    // else if (i % 4 == 0){
+    //   Serial.print("_");
+    // }
 
-      digitalWrite(laserPin, nextBit ? HIGH : LOW);
-      delayMicroseconds(clockPulse_us);
-      //delay(clockPulse_ms);  
-    }
-  }  
-  sending = 0;
+    digitalWrite(laserPin, nextBit ? LOW : HIGH);
+    delayMicroseconds(clockPulse_us);
+    //delay(clockPulse_ms);
+
+    digitalWrite(laserPin, nextBit ? HIGH : LOW);
+    delayMicroseconds(clockPulse_us);
+    //delay(clockPulse_ms);  
+    messageSize--;
+  }
 }
 
 void getMessage() {
@@ -55,37 +64,45 @@ void getMessage() {
     message = Serial.readStringUntil('\n');
     message.trim();
     if (message.length() == 0){      
-      sending = 0;
+      messageSize = 0;
+      msbIndex = messageSize - 1;
       return;
     }
     Serial.println("\nTransmitting Message:");
     Serial.println(message);
-    sending = 1;
+ 
     messageToBinary();
     bookendMessage();
   }
 }
 
 void messageToBinary() {
-  byteIndex = 0;
+  messageBinary = 0b0;
+  messageSize = 0;
 
   for (int i = 0; i < message.length(); i++) { 
     char c = message[i];
-    uint8_t currentByte = 0b0;
-    byteIndex = i+1;
     for (int j = 0; j < 8; j++) {
       bool bit = (c >> (7-j)) & 0b1;
-      currentByte = (currentByte << 1) | bit;
+      messageBinary = (messageBinary << 1) | bit;
+      messageSize++;
     }
-    messageBinary[byteIndex] = currentByte;
   }
 }
 
 void bookendMessage() {
   // keep preamble and postamble
+  uint64_t temp = 0b101;
+  temp = (temp << messageSize) | messageBinary;
+  messageSize += 3;
+  messageBinary = (temp << 0x8) | END_OF_TRANSMISSION;
+  messageSize += 8;
+  msbIndex = messageSize - 1;
 
-  uint8_t temp = 0b10101010;
-  messageBinary[0] = temp;
-  messageBinary[byteIndex+1] = END_OF_TRANSMISSION;
-  byteIndex++;
+
+  // for (int i = msbIndex; i >= 0; i--) {
+  //   bool bit = (messageBinary >> i) & 0b1;
+  //   Serial.print(bit);
+  //   if (i % 8 == 0) Serial.print(' '); // Optional: add space every byte
+  // }
 }
