@@ -13,6 +13,11 @@ int pinADC;
 bool bit;
 bool lastBit = 0b0;
 
+#define MAX_DECODE_CHARS 64
+
+uint8_t currentChar = 0b0;
+uint8_t messageBits[MAX_DECODE_CHARS];
+
 unsigned long prevDelta = 0;
 unsigned long nowDelta = 0;
 
@@ -24,29 +29,22 @@ int recievedBits = 0;
 bool mid;
 bool halfBit;
 
-const char endOfTransmission[] = "00000100"; // i.e. 0x04
+uint8_t endOfTransmission = 0x04; // i.e. 0x04
 
-// buffers replacing String
-char currentByte[9]; // 8 bits + null
 int byteLength = 0;
-
-#define MAX_DECODE_CHARS 64
-char bitStream[MAX_DECODE_CHARS + 1];
 int bitStreamLen = 0;
 
 void setup() {
   Serial.begin(115200);
   pinMode(sensorPin, INPUT);
   Serial.println("Manchester Receiver Ready");
-  currentByte[0] = '\0';
   byteLength = 0;
   bitStreamLen = 0;
-  bitStream[0] = '\0';
 }
 
 void loop() {
   
-  while (recievedBits < 5){
+  while (recievedBits < 8){
     pinADC = analogRead(sensorPin);
     bit = pinADC < THRESHOLD;
 
@@ -72,7 +70,7 @@ void loop() {
     mid = 1;
     halfBit = 0;
 
-    if (recievedBits == 5) Serial.println("\nMessage Inbound");
+    if (recievedBits == 8) Serial.println("\nMessage Inbound");
 
     delayMicroseconds(samplePeriod_us);
   }
@@ -108,35 +106,35 @@ void loop() {
     if (mid) {
       // append bit char to currentByte
       if (byteLength < 8) {
-        currentByte[byteLength++] = bit ? '1' : '0';
-        currentByte[byteLength] = '\0';
+        currentChar = (currentChar << 1) | bit;  
+        //Serial.print(bit);
+        byteLength++;      
       }
 
       if (byteLength == 8) {
 
-        if (strcmp(currentByte, endOfTransmission) == 0){
+        if (currentChar == endOfTransmission){
           Serial.println("Received Message:");
-          bitStream[bitStreamLen] = '\0';
-          Serial.println(bitStream);
+
+          for (int j = 0; j<bitStreamLen; j++){
+            Serial.print(char(messageBits[j]));
+          }
+
+          Serial.println("");
+
           bitStreamLen = 0;
           recievedBits = 0;
           prevDelta = 0;
           nowDelta = 0;
-
           lastTransitionTime = 0;
         }
-        else{
-          char value = (char) strtol(currentByte, NULL, 2);
-          if (bitStreamLen < MAX_DECODE_CHARS) {
-            bitStream[bitStreamLen++] = value;  
-          }
+        else if (bitStreamLen < MAX_DECODE_CHARS) {          
+          messageBits[bitStreamLen++] = currentChar;          
         }
-        
-        currentByte[0] = '\0';
+        currentChar = 0b0;
         byteLength = 0;
       }
     }
-
     lastTransitionTime = now;
     prevDelta = nowDelta;
     lastBit = bit;

@@ -5,7 +5,7 @@ unsigned long bitDuration_us = 1000000 / bitRate_Hz; // Microseconds per bit
 const int testBits = 100;       // Length of alternating test code (101010...)
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(laserPin, OUTPUT);
   digitalWrite(laserPin, LOW);
   Serial.println("Transmitter ready. Press enter to send test code.");
