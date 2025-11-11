@@ -1,143 +1,225 @@
-// === Manchester Receiver (String -> char[] version) ===
+// ============================================================
+// === Manchester Receiver (String → char[] version) ===
+// ============================================================
+// This sketch decodes a Manchester-encoded optical signal
+// received via a photodiode or phototransistor connected to A0.
+//
+// The receiver continuously samples the analog input and detects
+// transitions (edges) in the signal to recover timing and data bits.
+//
+// Operation overview:
+//  1. Wait for light transitions indicating the preamble pattern.
+//  2. Use timing ratios between transitions to identify half- vs full-bit spacing.
+//  3. Reconstruct each bit from edge timing and polarity.
+//  4. Stop reading once an End-of-Transmission (EOT) byte (0x04) is received.
+//
+// The code uses a software timing-based edge detector rather than
+// hardware interrupts, allowing simple adaptation across platforms.
+// ============================================================
+
 #include <Arduino.h>
 #include <string.h>
 #include <stdlib.h>
 
-const int sensorPin = A0;
-const int THRESHOLD = 20;  // adjust based on light level (0–1023)
-    
-const int samplePeriod_us = 25; //1000000UL / (halfBitRate_Hz * oversampleFactor);
+// -----------------------------
+// Hardware configuration
+// -----------------------------
+const int sensorPin = A0;      // Analog input from photodiode or phototransistor
+const int THRESHOLD = 20;      // ADC threshold separating light/dark (tune per setup)
 
-int pinADC;
+// -----------------------------
+// Protocol parameters
+// -----------------------------
+#define CHARACTER_LIMIT 64     // Maximum message size (excluding pre/postamble)
+#define SAMPLE_PERIOD_US 25    // Sampling interval (higher = slower, but less CPU load)
 
-bool bit;
-bool lastBit = 0b0;
+uint8_t END_OF_TRANSMISSION = 0x4; // ASCII EOT (signals end of message)
+uint8_t PREAMBLE = 0b10101010;     // Known alternating bit pattern for sync detection
 
-#define MAX_DECODE_CHARS 64
+// -----------------------------
+// Data storage
+// -----------------------------
+uint8_t messageBinary[CHARACTER_LIMIT + 2]; // Full message buffer including pre/postamble
+uint8_t currentChar = 0b0;                  // Currently assembled byte
+int byteIndex = 0;                          // Index of current byte in messageBinary
 
-uint8_t currentChar = 0b0;
-uint8_t messageBits[MAX_DECODE_CHARS];
+// -----------------------------
+// State and signal tracking
+// -----------------------------
+bool recieving = 0;             // Indicates if currently in active reception
 
-unsigned long prevDelta = 0;
-unsigned long nowDelta = 0;
+int valueADC;                   // Latest analog read value
+bool bit;                       // Current digital-level state (1/0)
+bool lastBit = 0b0;             // Previous sampled bit
+bool transition;                // TRUE when signal changes polarity
 
-unsigned long lastTransitionTime = 0;
-unsigned long now;
+// Timing variables for measuring bit intervals
+unsigned long prevDelta = 0;    // Duration between previous two transitions
+unsigned long nowDelta = 0;     // Duration of current transition spacing
+unsigned long lastTransitionTime = 0;  // Timestamp of last detected transition
+unsigned long now;              // Current timestamp (micros())
 
-int recievedBits = 0;
+// Bit assembly helpers
+int recievedBits = 0;           // Number of bits currently accumulated in currentChar
+bool mid;                       // Mid-bit indicator (used for timing-based decoding)
+bool halfBit;                   // Tracks half-bit vs full-bit transitions
 
-bool mid;
-bool halfBit;
 
-uint8_t endOfTransmission = 0x04; // i.e. 0x04
-
-int byteLength = 0;
-int bitStreamLen = 0;
-
+// ============================================================
+// setup()
+// Initializes serial output and input pin configuration.
+// ============================================================
 void setup() {
   Serial.begin(115200);
   pinMode(sensorPin, INPUT);
   Serial.println("Manchester Receiver Ready");
-  byteLength = 0;
-  bitStreamLen = 0;
 }
 
+
+// ============================================================
+// loop()
+// Continuously samples the optical input to detect and decode
+// incoming Manchester-encoded data streams.
+// ============================================================
 void loop() {
-  
-  while (recievedBits < 8){
-    pinADC = analogRead(sensorPin);
-    bit = pinADC < THRESHOLD;
 
-    bool transition = bit ^ lastBit;   
+  // Regular sampling delay for consistent read timing
+  delayMicroseconds(SAMPLE_PERIOD_US);
 
-    if (transition){
-      recievedBits ++;
-      // On recievedBits = 1: nowDelta = now - 0 and prevDelta = 0 are meaningless
-      // On recievedBits = 2: nowDelta = now - lastTransitionTime is valid but prevDelta = now - 0 is meaningless
-      // On recievedBits = 3: nowDelta = now - lastTransitionTime is valid and prevDelta = now - lastTransitionTime is valid
+  // Convert analog reading to binary logic level
+  valueADC = analogRead(sensorPin);
+  bit = valueADC < THRESHOLD;   // Normal logic: dark (low light) = 0
 
+  // --- Wait for incoming signal ---
+  // If not currently receiving and the signal is idle (no light), skip loop
+  if (!recieving && !bit) {
+    return;
+  }
+
+  // --- Start of transmission detected ---
+  // Once the signal goes active, initialize tracking variables
+  recieving = 1;
+  lastBit = 0;
+  mid = 1;
+  halfBit = 0;
+  currentChar = 0b0;
+
+  // ============================================================
+  // PREAMBLE DETECTION PHASE
+  // Wait until the byte reconstructed from transitions equals
+  // the known preamble pattern (0b10101010).
+  // This ensures the receiver is aligned to the transmitter’s timing.
+  // ============================================================
+  while (currentChar != PREAMBLE) {
+    valueADC = analogRead(sensorPin);
+    bit = valueADC < THRESHOLD;
+    transition = bit ^ lastBit;   // XOR detects edge (change in signal)
+
+    if (transition) {
+      // Shift in the latest bit based on transition polarity
+      currentChar = (currentChar << 0b1) | bit;
+
+      // Record transition timing for synchronization reference
       now = micros();
       nowDelta = now - lastTransitionTime;
 
-      // ratio = nowDelta / prevDelta
-
       lastTransitionTime = now;
       prevDelta = nowDelta;
+      lastBit = bit;
     }
-    lastBit = bit;
 
-    // set mid and halfBit for when we exit out of while-loop. we don't want it to set every time the main loop runs
-    mid = 1;
-    halfBit = 0;
-
-    if (recievedBits == 8) Serial.println("\nMessage Inbound");
-
-    delayMicroseconds(samplePeriod_us);
+    delayMicroseconds(SAMPLE_PERIOD_US);
   }
-  
 
-  pinADC = analogRead(sensorPin);
-  bit = pinADC < THRESHOLD;
+  Serial.println("\nMessage Inbound...");
 
-  bool transition = bit ^ lastBit;
+  // Store preamble as first byte
+  byteIndex = 0;
+  messageBinary[byteIndex] = currentChar;
 
-  if (transition) {
-    now = micros();
-    nowDelta = now - lastTransitionTime;
-    
+  // ============================================================
+  // MESSAGE RECONSTRUCTION PHASE
+  // Read and reconstruct each byte until End-of-Transmission (0x04)
+  // is received.
+  // ============================================================
+  while (messageBinary[byteIndex] != END_OF_TRANSMISSION) {
 
-    float ratio = (float)nowDelta / (float)prevDelta;
-    //Serial.println(ratio);
+    byteIndex++;
+    recievedBits = 0;
+    currentChar = 0b0;  
 
-    byte condLow  = (ratio < 0.75);  // 1 if true, else 0
-    byte condHigh = (ratio > 1.5);   // 1 if true, else 0
-    
-    // Update halfBit based on conditions
-    halfBit = condLow | (halfBit & ~condHigh);
+    // --- Bit accumulation loop (8 bits per character) ---
+    while (recievedBits < 8) {
+      valueADC = analogRead(sensorPin);
+      bit = valueADC < THRESHOLD;
+      transition = bit ^ lastBit;     // Detect edge
+      lastBit = bit;
 
-    // mid logic:
-    // - Set to 0 if condLow
-    // - Set to 1 if condHigh
-    // - Toggle if halfBit and not condLow or condHigh
-    mid = (mid & ~(condLow | condHigh)) ^ (halfBit & ~(condLow | condHigh));
-    mid |= condHigh;
-    mid &= ~condLow;
+      if (transition) {
+        // Record transition timing for bit-interval comparison
+        now = micros();
+        nowDelta = now - lastTransitionTime;        
 
-    if (mid) {
-      // append bit char to currentByte
-      if (byteLength < 8) {
-        currentChar = (currentChar << 1) | bit;  
-        //Serial.print(bit);
-        byteLength++;      
+        // Compute timing ratio between current and previous edges
+        // Used to distinguish half-bit vs full-bit spacing
+        float ratio = (float)nowDelta / (float)prevDelta;
+
+        // Determine timing conditions:
+        // condLow  → short interval (half-bit)
+        // condHigh → long interval (double-bit or missing transition)
+        byte condLow  = (ratio < 0.75);
+        byte condHigh = (ratio > 1.5);
+        
+        // ------------------------------------------------------------
+        // Half-bit state tracking logic:
+        // halfBit is set if a short interval is detected,
+        // or retained unless reset by a long interval.
+        // ------------------------------------------------------------
+        halfBit = condLow | (halfBit & ~condHigh);
+
+        // ------------------------------------------------------------
+        // Mid-bit decoding logic:
+        // - mid = 0 when condLow (short)
+        // - mid = 1 when condHigh (long)
+        // - toggles when a valid half-bit pair occurs
+        // ------------------------------------------------------------
+        mid = (mid & ~(condLow | condHigh)) ^ (halfBit & ~(condLow | condHigh));
+        mid |= condHigh;
+        mid &= ~condLow;
+
+        // ------------------------------------------------------------
+        // Bit reconstruction:
+        // Each full bit corresponds to one "mid" state,
+        // so bits are sampled only when mid == 1.
+        // ------------------------------------------------------------
+        if (mid) {
+          recievedBits++;
+          currentChar = (currentChar << 0b1) | bit;
+        }
+
+        // Update transition timing references for next loop iteration
+        lastTransitionTime = now;
+        prevDelta = nowDelta;
       }
 
-      if (byteLength == 8) {
-
-        if (currentChar == endOfTransmission){
-          Serial.println("Received Message:");
-
-          for (int j = 0; j<bitStreamLen; j++){
-            Serial.print(char(messageBits[j]));
-          }
-
-          Serial.println("");
-
-          bitStreamLen = 0;
-          recievedBits = 0;
-          prevDelta = 0;
-          nowDelta = 0;
-          lastTransitionTime = 0;
-        }
-        else if (bitStreamLen < MAX_DECODE_CHARS) {          
-          messageBits[bitStreamLen++] = currentChar;          
-        }
-        currentChar = 0b0;
-        byteLength = 0;
-      }
+      delayMicroseconds(SAMPLE_PERIOD_US);
     }
-    lastTransitionTime = now;
-    prevDelta = nowDelta;
-    lastBit = bit;
+
+    // Store the fully reconstructed byte
+    messageBinary[byteIndex] = currentChar;
   }
-  delayMicroseconds(samplePeriod_us);
+
+  // ============================================================
+  // MESSAGE COMPLETION
+  // Print decoded message characters to the serial monitor,
+  // skipping the preamble and excluding the EOT byte.
+  // ============================================================
+  Serial.println("Received Message:");
+  for (int i = 1; i < byteIndex; i++) {  // Skip preamble at index 0
+    Serial.print(char(messageBinary[i]));
+  }
+  Serial.println("");
+
+  // Reset receiver state for next transmission
+  recieving = 0;
 }
