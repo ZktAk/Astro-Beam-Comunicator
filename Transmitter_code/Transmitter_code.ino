@@ -21,7 +21,7 @@ unsigned long clockPulse_us = 1000000 / clockPulseRate_Hz;
 
 // Special transmission markers
 int8_t END_OF_TRANSMISSION = 0x4;      // End-of-Transmission marker (ASCII EOT)
-#define CHARACTER_LIMIT 64              // Max message length (in characters, excluding pre/postamble)
+#define CHARACTER_LIMIT 66              // Max message length (in characters, excluding pre/postamble)
 
 
 // -----------------------------
@@ -95,6 +95,7 @@ void loop() {
   }
 
   // Transmission complete
+  Serial.println("\nTransmission complete");
   sending = 0;
 }
 
@@ -116,6 +117,15 @@ void getMessage() {
       sending = 0;
       return;
     }
+
+    if (message.length() > CHARACTER_LIMIT-2) { 
+      Serial.print("\nError: \tMessage length too long! Message not sent. Ensure message is ");
+      Serial.print(CHARACTER_LIMIT-2);
+      Serial.print(" characters or less. \n\tCurrent length: ");
+      Serial.println(message.length());
+      sending = 0;
+      return;
+    } 
 
     // Display message for confirmation
     Serial.println("\nTransmitting Message:");

@@ -30,7 +30,7 @@ const int THRESHOLD = 20;      // ADC threshold separating light/dark (tune per 
 // -----------------------------
 // Protocol parameters
 // -----------------------------
-#define CHARACTER_LIMIT 64     // Maximum message size (excluding pre/postamble)
+#define CHARACTER_LIMIT 66     // Maximum message size (excluding pre/postamble)
 #define SAMPLE_PERIOD_US 25    // Sampling interval (higher = slower, but less CPU load)
 
 uint8_t END_OF_TRANSMISSION = 0x4; // ASCII EOT (signals end of message)
