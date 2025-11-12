@@ -127,7 +127,6 @@ void loop() {
       prevDelta = nowDelta;
       lastBit = bit;
     }
-
     delayMicroseconds(SAMPLE_PERIOD_US);
   }
 
@@ -158,8 +157,8 @@ void loop() {
       if (transition) {
         // Record transition timing for bit-interval comparison
         now = micros();
-        nowDelta = now - lastTransitionTime;        
-
+        nowDelta = now - lastTransitionTime;       
+        
         // Compute timing ratio between current and previous edges
         // Used to distinguish half-bit vs full-bit spacing
         float ratio = (float)nowDelta / (float)prevDelta;
@@ -201,7 +200,6 @@ void loop() {
         lastTransitionTime = now;
         prevDelta = nowDelta;
       }
-
       delayMicroseconds(SAMPLE_PERIOD_US);
     }
 

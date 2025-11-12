@@ -1,7 +1,7 @@
 // Reciever code
 const int analogPin = A0;             // Photodiode input
-const int bitRate_Hz = 100;          // Must match transmitter
-const int threshold = 35;             // Raw ADC threshold for bit=1 (voltage < ~1V)
+const int bitRate_Hz = 1000;          // Must match transmitter
+const int threshold = 20;             // Raw ADC threshold for bit=1 (voltage < ~1V)
 const int testBits = 100;             // Length of alternating test code (101010...)
 
 
@@ -9,7 +9,7 @@ unsigned long bitDuration_us = 1000000 / bitRate_Hz; // Microseconds per bit (in
 
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println("Receiver ready. Waiting for test code...");
 }
 
@@ -38,7 +38,7 @@ void calibrateReceiver() {
       bitCount++;
     }
     lastBit = bit;
-    delayMicroseconds(100); // Sample frequently
+    delayMicroseconds(25); // Sample frequently
   }
 
   // Calculate average bit duration

@@ -1,5 +1,5 @@
 const int laserPin = 9;         // Laser output pin
-const int bitRate_Hz = 3000;     // Transmission frequency (bits per second)
+const int bitRate_Hz = 2250;     // Transmission frequency (bits per second)
 unsigned long bitDuration_ms = 1000 / bitRate_Hz; // Microseconds per bit
 unsigned long bitDuration_us = 1000000 / bitRate_Hz; // Microseconds per bit
 const int testBits = 100;       // Length of alternating test code (101010...)
