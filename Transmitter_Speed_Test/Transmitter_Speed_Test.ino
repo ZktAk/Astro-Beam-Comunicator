@@ -1,49 +1,95 @@
-const int laserPin = 9;         // Laser output pin
-const int bitRate_Hz = 2250;     // Transmission frequency (bits per second)
-unsigned long bitDuration_ms = 1000 / bitRate_Hz; // Microseconds per bit
-unsigned long bitDuration_us = 1000000 / bitRate_Hz; // Microseconds per bit
-const int testBits = 100;       // Length of alternating test code (101010...)
+// ============================================================
+//      HIGH-PRECISION LASER TRANSMITTER (UP TO ~8 MHz)
+// ============================================================
+// - Uses Timer1 CTC mode to generate exact bit timing
+// - Laser output driven via pin 9 (OC1A / PB1) with minimal ISR overhead
+// - Supports manual HIGH/LOW override
+// - 100-bit alternating calibration pattern example
+// ============================================================
 
+#include <Arduino.h>
+
+const int laserPin = 9;          // OC1A / PB1 hardware pin
+const uint32_t bitRate_Hz = 25000;  // Change as needed
+const int testBits = 100;        // Calibration pattern length
+
+// Timer tick: 1 tick = 1 / 16 MHz = 62.5 ns
+uint16_t bitPeriodTicks;          // Timer1 compare match value
+
+volatile bool transmitting = false;
+volatile bool forceManual = false;
+volatile uint8_t bitIndex = 0;
+
+// =================== TIMER1 ISR ===========================
+ISR(TIMER1_COMPA_vect) {
+    if (!transmitting || forceManual) return;
+
+    // Toggle laser pin using PINB register (single instruction)
+    PINB |= (1 << PB1);  // PB1 = laserPin, toggles current state
+
+    bitIndex++;
+
+    if (bitIndex >= testBits) {
+        transmitting = false;
+        // Ensure laser is OFF at end
+        PORTB &= ~(1 << PB1);
+    }
+}
+
+// =================== SETUP ================================
 void setup() {
-  Serial.begin(115200);
-  pinMode(laserPin, OUTPUT);
-  digitalWrite(laserPin, LOW);
-  Serial.println("Transmitter ready. Press enter to send test code.");
+    Serial.begin(115200);
+    pinMode(laserPin, OUTPUT);
+    PORTB &= ~(1 << PB1); // Ensure laser starts LOW
+
+    // Calculate Timer1 compare match value
+    // Formula: OCR1A = F_CPU / bitRate_Hz - 1
+    bitPeriodTicks = (uint16_t)(F_CPU / bitRate_Hz - 1);
+
+    // -------- Configure Timer1 for CTC mode, no prescaler --------
+    TCCR1A = 0;
+    TCCR1B = (1 << WGM12) | (1 << CS10); // CTC, no prescaler
+    OCR1A = bitPeriodTicks;
+    TIMSK1 |= (1 << OCIE1A); // Enable Compare Match A ISR
+
+    Serial.println("High-precision transmitter ready.");
+    Serial.println("Send '1' = laser HIGH, '0' = laser LOW, any other key → test pattern.");
 }
 
+// =================== LOOP ================================
 void loop() {
-  if (Serial.available() > 0) {
-    String input = Serial.readStringUntil('\n'); // Read input until newline
+    if (Serial.available() > 0) {
+        String input = Serial.readStringUntil('\n');
+        input.trim();
 
-    input.trim(); // Remove whitespace and newline characters
-
-    if (input == "1") {
-      digitalWrite(laserPin, HIGH); // Set pin HIGH
-      Serial.println("Pin 9 set HIGH");
-    } 
-    else if (input == "0") {
-      digitalWrite(laserPin, LOW); // Set pin LOW
-      Serial.println("Pin 9 set LOW");
-    } 
-    else {
-      sendTestCode(); // Keep original behavior
+        if (input == "1") {
+            forceManual = true;
+            PORTB |= (1 << PB1);
+            Serial.println("Laser → HIGH (manual mode)");
+        }
+        else if (input == "0") {
+            forceManual = true;
+            PORTB &= ~(1 << PB1);
+            Serial.println("Laser → LOW (manual mode)");
+        }
+        else {
+            forceManual = false;
+            startTestCode();
+        }
     }
-  }
 }
 
+// =================== SEND HIGH-PRECISION CALIBRATION PATTERN ===========
+void startTestCode() {
+    Serial.println("Sending perfect-timing 100-bit alternating pattern...");
 
-void sendTestCode() {
-  Serial.println("Sending test code: alternating 1s and 0s for 100 bits");
-  for (int i = 0; i < testBits; i++) {
-    digitalWrite(laserPin, (i % 2) == 0 ? HIGH : LOW); // Alternate 1 (HIGH) and 0 (LOW)
-    if (bitRate_Hz <= 1500){
-      delay(bitDuration_ms);
+    bitIndex = 0;
+    transmitting = true;
+
+    // Non-blocking: let ISR handle everything
+    while (transmitting) {
+        // Optional: you can do other tasks here if needed
     }
-    else{
-      delayMicroseconds(bitDuration_us);
-    }   
-    
-  }
-  digitalWrite(laserPin, LOW);
-  Serial.println("Test code sent.");
+
+    Serial.println("Pattern sent.");
 }

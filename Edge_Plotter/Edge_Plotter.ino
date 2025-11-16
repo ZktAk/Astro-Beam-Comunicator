@@ -1,5 +1,5 @@
 // Reciever code
-const int analogPin = A0;             // Photodiode input
+const int analogPin = 8;             // Photodiode input
 
 unsigned long raws[200];
 
@@ -12,10 +12,10 @@ void setup() {
 }
 
 void loop() {
-  int raw = analogRead(analogPin); 
+  int raw = digitalRead(analogPin); 
   Serial.println(raw);
 
-  // if (raw > 0 and raw < 930) {
+  // if (raw > 4 and raw < 1018) {
   //   raws[n] = raw;
   //   n++;
   //   printed = 1;
@@ -29,7 +29,7 @@ void loop() {
   //   printed = 0;
   // }
 
-  delayMicroseconds(100);
+  delayMicroseconds(1000);
 
 
 }

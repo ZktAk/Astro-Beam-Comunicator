@@ -15,7 +15,7 @@
 // Hardware and transmission setup
 // -----------------------------
 const int laserPin = 9;                // Laser diode control pin
-const int clockPulseRate_Hz = 1000;    // Half-bit frequency (bit transitions per second)
+const int clockPulseRate_Hz = 5000;    // Half-bit frequency (bit transitions per second)
 unsigned long clockPulse_ms = 1000 / clockPulseRate_Hz; 
 unsigned long clockPulse_us = 1000000 / clockPulseRate_Hz; 
 
